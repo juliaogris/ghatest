@@ -1,0 +1,10 @@
+name: ci
+on:
+  push
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+    - run: echo "CI job"
+    - run: echo "${{ github.event_name }}"
+    - run: echo "${{ toJSON(github.event) }}"
