@@ -1,51 +1,72 @@
 #!/usr/bin/env bash
 
-if ! [[ -f "${GITHUB_EVENT_PATH}" ]]; then
-    echo "GITHUB_EVENT_PATH not defined or doesn't exist" >&2
-    exit 1
+set -euo pipefail
+set -x
+
+if [[ -z "${SLACK_TOKEN-}" ]]; then
+    read -r SLACK_TOKEN
 fi
+SLACK_HOOK_URL="https://hooks.slack.com/services/${SLACK_TOKEN}"
 
-read -r slack_token
-HOOK_URL="https://hooks.slack.com/services/${slack_token}"
+: "${GITHUB_SERVER_URL:=https://github.com}"
+: "${GITHUB_API_URL:=https://api.github.com}"
+: "${GITHUB_SHA:=$(git rev-parse HEAD)}"
+: "${PICTURE_BASE_URL:=https://github.com/juliaogris/pic/raw/master/github}"
 
-event_field() {
-    jq -r ".$1" "${GITHUB_EVENT_PATH}"
-}
+if [[ -z "${GITHUB_REPOSITORY-}" ]]; then
+    REPO_URL=$(git remote get-url origin)
+    GITHUB_REPOSITORY="${REPO_URL#${GITHUB_SERVER_URL}/}"
+else
+    REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+fi
+REPO=${GITHUB_REPOSITORY#*/}
 
-pr_field() {
+: "${BUILD_URL:=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions${GITHUB_RUN_ID:+/runs/${GITHUB_RUN_ID}}}"
+: "${GITHUB_REF:=$(git symbolic-ref HEAD)}"
+BRANCH=${GITHUB_REF#refs/heads/}
+BRANCH_URL="${REPO_URL}/tree/${BRANCH}"
+
+# prop extracts property from JSON object.
+# prop('{"name": "Tricia", "age": 42}', age)
+# 42
+prop() {
     echo "$1" | jq -r ".$2"
 }
 
-REPO=$(event_field repository.name)
-REPO_FULLNAME=$(event_field repository.full_name)
-REPO_URL=$(event_field repository.html_url)
-
-BRANCH_URL="${REPO_URL}/blob/${BRANCH}"
-BUILD_URL=$(event_field target_url)
-
-PR="Commit \`${GITHUB_SHA::7}\`"
-PR_URL=$(event_field commit.html_url)
-PR_MESSAGE=$(event_field commit.commit.message | head -n 1)
-PR_AUTHOR=$(event_field commit.commit.author.name)
-
-pr=$(curl -H "Accept: application/vnd.github.groot-preview+json" \
-    "https://api.github.com/repos/${REPO_FULLNAME}/commits/${GITHUB_SHA}/pulls" |
-    jq '.[0] | {url: html_url, number, message: .title, author: .user.login}')
-if [[ "$(echo "${pr:-{}}" | jq .number)" != null ]]; then
-    PR="PR #$(pr_field "${pr}" number)"
-    PR_URL=$(pr_field "${pr}" url)
-    PR_MESSAGE=$(pr_field "${pr}" message)
-    PR_AUTHOR=$(pr_field "${pr}" author)
+CURL_HEADERS=(-H "Accept: application/vnd.github.groot-preview+json")
+if [[ -n "${GITHUB_TOKEN-}" ]]; then
+    CURL_HEADERS+=(-H "Authorization: token ${GITHUB_TOKEN}")
 fi
 
+COMMIT_URL="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}"
+pr=$(curl "${CURL_HEADERS[@]}" "${COMMIT_URL}/pulls" |
+    jq '.[0] | {url: .html_url, number, title: .title, author: .user.login}' || echo '{}')
+if [[ $(prop "${pr}" number) != null ]]; then
+    PR="PR #$(prop "${pr}" number)"
+    PR_URL=$(prop "${pr}" url)
+    PR_TITLE=$(prop "${pr}" title)
+    PR_AUTHOR=$(prop "${pr}" author)
+else
+    commit=$(curl "${CURL_HEADERS[@]}" "${COMMIT_URL}" |
+        jq '{url: .html_url, message: .commit.message, author: .author.login}' || echo '{}')
+    PR="Commit \`${GITHUB_SHA::7}\`"
+    if [[ $(prop "${commit}" url) != null ]]; then
+        PR_URL=$(prop "${commit}" url)
+        PR_TITLE=$(prop "${commit}" message | head -n 1)
+        PR_AUTHOR=$(prop "${commit}" author)
+    else
+        PR_URL="${REPO_URL}"
+        PR_TITLE=$(git show -s --pretty=format:%s)
+        PR_AUTHOR=$(git show -s --pretty=format:%an)
+    fi
+fi
 
-
-curl -d @- "${HOOK_URL}" <<EOF
+curl -d @- "${SLACK_HOOK_URL}" <<EOF
 {
- "icon_url": "https://github.com/juliaogris/pic/raw/master/github/failed-build.png",
- ${CHANNEL:+"\"channel\": ${CHANNEL},"}
+ "icon_url": "${PICTURE_BASE_URL}/failed-build.png",
+ ${CHANNEL:+"\"channel\": \"${CHANNEL}\","}
  "username": "GitHub",
- "text": "${SLACK_TEXT}",
+ "text": "${SLACK_TEXT-}",
  "attachments": [
       {
           "fallback": "Build failure on ${BRANCH}",
@@ -54,11 +75,11 @@ curl -d @- "${HOOK_URL}" <<EOF
             {
                 "value": "\
 *<${BUILD_URL}|Build Failure>* on \`<${BRANCH_URL}|${REPO}:${BRANCH}>\`\n\
-<${PR_URL}|${PR}> - ${PR_MESSAGE} \`@${PR_AUTHOR}\`"
+<${PR_URL}|${PR}> - ${PR_TITLE} \`@${PR_AUTHOR}\`"
             }
           ],
           "footer": "<${REPO_URL}|${REPO}>",
-          "footer_icon": "https://github.com/juliaogris/pic/raw/master/github/footer-logo.png"
+          "footer_icon": "${PICTURE_BASE_URL}/footer-logo.png"
       }
   ]
 }

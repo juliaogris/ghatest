@@ -7,3 +7,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - run: echo ${{ github.event_name }}
+    - if: ${{ contains(github.event.branches.*.name, 'master') && (github.event.state == 'failure' || github.event.state == 'error')}}
+      run: echo "failed build on master"
