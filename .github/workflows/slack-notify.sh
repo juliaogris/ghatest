@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-set -x
 
 if [[ -z "${SLACK_TOKEN-}" ]]; then
     read -r SLACK_TOKEN
@@ -39,7 +38,7 @@ if [[ -n "${GITHUB_TOKEN-}" ]]; then
 fi
 
 COMMIT_URL="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}"
-pr=$(curl "${CURL_HEADERS[@]}" "${COMMIT_URL}/pulls" |
+pr=$(curl -fsSL "${CURL_HEADERS[@]}" "${COMMIT_URL}/pulls" |
     jq '.[0] | {url: .html_url, number, title: .title, author: .user.login}' || echo '{}')
 if [[ $(prop "${pr}" number) != null ]]; then
     PR="PR #$(prop "${pr}" number)"
@@ -47,7 +46,7 @@ if [[ $(prop "${pr}" number) != null ]]; then
     PR_TITLE=$(prop "${pr}" title)
     PR_AUTHOR=$(prop "${pr}" author)
 else
-    commit=$(curl "${CURL_HEADERS[@]}" "${COMMIT_URL}" |
+    commit=$(curl -fsSL"${CURL_HEADERS[@]}" "${COMMIT_URL}" |
         jq '{url: .html_url, message: .commit.message, author: .author.login}' || echo '{}')
     PR="Commit \`${GITHUB_SHA::7}\`"
     if [[ $(prop "${commit}" url) != null ]]; then
