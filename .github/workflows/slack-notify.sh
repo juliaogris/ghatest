@@ -46,7 +46,7 @@ if [[ $(prop "${pr}" number) != null ]]; then
     PR_TITLE=$(prop "${pr}" title)
     PR_AUTHOR=$(prop "${pr}" author)
 else
-    commit=$(curl -fsSL"${CURL_HEADERS[@]}" "${COMMIT_URL}" |
+    commit=$(curl -fsSL "${CURL_HEADERS[@]}" "${COMMIT_URL}" |
         jq '{url: .html_url, message: .commit.message, author: .author.login}' || echo '{}')
     PR="Commit \`${GITHUB_SHA::7}\`"
     if [[ $(prop "${commit}" url) != null ]]; then
