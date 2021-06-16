@@ -60,7 +60,7 @@ else
     fi
 fi
 
-curl -d @- "${SLACK_HOOK_URL}" <<EOF
+curl -fsSL -d @- "${SLACK_HOOK_URL}" <<EOF
 {
  "icon_url": "${PICTURE_BASE_URL}/failed-build.png",
  ${CHANNEL:+"\"channel\": \"${CHANNEL}\","}
