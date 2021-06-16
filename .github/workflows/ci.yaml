@@ -14,5 +14,5 @@ jobs:
     - if: ${{ failure() && github.event_name == 'push' }} # only run for failed build on master
       run: ${GITHUB_WORKSPACE}/.github/workflows/slack-notify.sh <<< "${{ secrets.SLACK_TOKEN }}"
       env:
-        SLACK_TEXT: <!here|here>         # optional; @-mention project owners, e.g. <@U0LAN0Z89>, or other text
+        SLACK_TEXT: <!here|here>    # optional; text or @-mention project owners by slack member ID, e.g. <@U0LAN0Z89>
         # CHANNEL: D01J5K3RLQJ      # optional; use if different from slack webhook setup, take from channel URL
