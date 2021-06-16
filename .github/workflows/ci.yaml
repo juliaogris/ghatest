@@ -1,10 +1,18 @@
 name: ci
 on:
-  push
+  push:
+    branches: [ master ]
+  pull_request:
+
 jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-    - run: echo "CI job"
-    - run: echo "${{ github.event_name }}"
-    - run: echo "${{ toJSON(github.event) }}"
+    - uses: actions/checkout@v2
+    - if: ${{ github.event_name == 'push' }} # only run on master, simulate failed build on master
+      run: false
+    - if: ${{ failure() && github.event_name == 'push' }} # only run for failed build on master
+      run: ${GITHUB_WORKSPACE}/.github/workflows/slack-notify.sh <<< "${{ secrets.SLACK_TOKEN }}"
+      env:
+        SLACK_TEXT: <!here>         # optional; @-mention project owners, e.g. <@U0LAN0Z89>, or other text
+        # CHANNEL: D01J5K3RLQJ      # optional; use if different from slack webhook setup, take from channel URL
